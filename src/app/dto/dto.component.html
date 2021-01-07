@@ -1,0 +1,13 @@
+<section style="padding-left: 8px">
+  <p class="warn">不要使用这种数据 `[[ ], [ ], ...]`</p>
+  <p>
+    root name:
+    <input [(ngModel)]="rootName" />
+    <button (click)="transform()" title="自动拷贝到粘贴板">transform</button>
+  </p>
+</section>
+
+<div id="textarea-box">
+  <textarea #input>{{ objectText }}</textarea>
+  <textarea #output></textarea>
+</div>
