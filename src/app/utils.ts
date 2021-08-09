@@ -1,3 +1,5 @@
+import * as _ from 'lodash';
+
 export function createType(typeof_type: string): string {
   let type: string;
   if (_.isInteger(typeof_type)) {

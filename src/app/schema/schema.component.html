@@ -1,17 +1,24 @@
 <section style="padding-left: 8px">
-  <p class="warn">不要使用这种数据 `[[ ], [ ], ...]`</p>
   <p class="tools">
-    root name:
+    Root Name:
     <input [(ngModel)]="rootName" />
-    <button style="margin-left: 8px;" (click)="transform()" title="自动拷贝到粘贴板">transform</button>
-    <label style="margin-left: 8px;">
-      dalete id
-      <input type="checkbox" name="" [(ngModel)]="deleteId" />
-    </label>
+    <button style="margin-left: 8px" (click)="transform()">transform</button>
   </p>
 </section>
 
 <div id="textarea-box">
-  <textarea #input>{{ objectText }}</textarea>
-  <textarea #output></textarea>
+  <div class="input">
+    <ngx-monaco-editor
+      style="height: 100%"
+      [options]="inputEditorOptions"
+      [(ngModel)]="inputValue"
+    ></ngx-monaco-editor>
+  </div>
+  <div class="output">
+    <ngx-monaco-editor
+      style="height: 100%"
+      [options]="outputEditorOptions"
+      [(ngModel)]="outputValue"
+    ></ngx-monaco-editor>
+  </div>
 </div>

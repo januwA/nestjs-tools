@@ -1,10 +1,5 @@
-import {
-  Component,
-  ElementRef,
-  OnInit,
-  ViewChild,
-  AfterViewInit,
-} from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import * as _ from 'lodash';
 
 import { createType } from '../utils';
 
@@ -16,12 +11,8 @@ class BuiltValueAttr {
     public isList = false
   ) {}
 
-  build(dId = true) {
-    if (dId) {
-      if (this.key === 'id' || this.key === '_id') return '';
-    }
+  build() {
     const keyNots = _.upperFirst(this.key.replace(/s$/, ''));
-
     let mType = this.isSchema
       ? this.isList
         ? `{ type: mongoose.Schema.Types.ObjectId, ref: '${keyNots}' }`
@@ -29,30 +20,32 @@ class BuiltValueAttr {
       : this.toType;
 
     let type = this.isSchema ? keyNots : _.lowerCase(this.toType);
+
     if (this.isList) {
       mType = `[${mType}]`;
       type += '[]';
     }
 
     return `
-  @Prop({ type: ${mType} })
+  @Prop({ type: ${mType}, required: true })
   ${this.key}: ${type};
   `;
   }
 }
 
 class BuiltValue {
-  resultObj = {};
-  constructor(
-    public obj: any,
-    public rootName: string,
-    public deleteId: boolean = true
-  ) {}
+  allClass: {
+    [className: string]: BuiltValueAttr[];
+  } = {};
+
+  constructor(public obj: any, public rootName: string) {}
 
   build() {
     this.parse(this.obj, this.rootName);
-    let resultString = this.makeBody(this.resultObj);
-    return this.addHeader(resultString).trim();
+    console.log(this.allClass);
+
+    const body = this.makeBody(this.allClass);
+    return this.addHeader(body).trim();
   }
 
   parse(data: any, name: string) {
@@ -61,7 +54,7 @@ class BuiltValue {
         data = _.first(data);
       }
 
-      const dotObjects = this.resultObj;
+      const dotObjects = this.allClass;
       name = _.upperFirst(name).replace(/s$/, '');
       dotObjects[name] = [];
 
@@ -103,15 +96,28 @@ class BuiltValue {
 
   makeBody(obj: { [dtoName: string]: BuiltValueAttr[] }) {
     return Object.entries(obj).reduce((acc, [className, props]) => {
-      const attrs = props.reduce((acc, it) => {
-        return (acc += it.build(this.deleteId));
-      }, '');
+      const attrs = props.reduce((acc, it) => (acc += it.build()), '');
       return (
         `
-export type ${className}Document = ${className} & mongoose.Document;
 @Schema()
-export class ${className} {\n${attrs}\n}
+export class ${className} {
+
+  // 序列化返回值
+  // https://docs.nestjs.com/techniques/serialization
+  static async doc(document: any) {
+    return new ${className}((await document).toJSON());
+  }
+
+  constructor(partial: Partial<${className}>) {
+    Object.assign(this, partial);
+  }
+
+${attrs}
+}
+        
+export type ${className}Document = ${className} & mongoose.Document;
 export const ${className}Schema = SchemaFactory.createForClass(${className});
+
 ` + acc
       );
     }, '');
@@ -121,74 +127,58 @@ export const ${className}Schema = SchemaFactory.createForClass(${className});
   addHeader(body: string): string {
     const header = `
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import * as mongoose from 'mongoose';\n`;
+import * as mongoose from 'mongoose';
+import { Exclude } from 'class-transformer';
+
+`;
+
     return header + body;
   }
 }
 @Component({
   selector: 'app-schema',
   templateUrl: './schema.component.html',
-  styleUrls: ['./schema.component.styl'],
+  styleUrls: ['./schema.component.sass'],
 })
-export class SchemaComponent implements OnInit, AfterViewInit {
-  @ViewChild('input')
-  inputRef: ElementRef<HTMLTextAreaElement>;
+export class SchemaComponent implements OnInit {
+  inputEditorOptions = {
+    theme: 'vs-dark',
+    language: 'json',
+    autoIndent: 'full',
+    automaticLayout: true,
+  };
+  outputEditorOptions = {
+    theme: 'vs-dark',
+    language: 'typescript',
+    readOnly: true,
+    automaticLayout: true,
+  };
 
-  @ViewChild('output')
-  outputRef: ElementRef<HTMLTextAreaElement>;
-
-  objectText = `{
-  _id: '1',
-  name: 'cat 1',
-  age: 2,
-  breeds: [
-    {id: '123', breed: 'a'},
-    {id: '124', breed: 'b'},
-  ],
-  strList: ['a', 'b'],
-
-  color: {
-    _id: 'ad2',
-    color: 'red',
-  }
+  inputValue = `{
+  isDelete: false,
+  title: "js学习笔记",
+  arr: ["a", "b"],
+  published: "2019-08-16T13:50:31.307Z",
+  types: [
+    {
+      title: "标题",
+      description: "介绍"
+    }
+  ]
 }`;
-
+  outputValue = '';
   rootName = 'Cat';
-  deleteId = true;
 
-  inputMirror: any;
-  outputMirror: any;
-
-  constructor() {}
   ngOnInit(): void {}
 
-  ngAfterViewInit() {
-    this.inputMirror = CodeMirror.fromTextArea(this.inputRef.nativeElement, {
-      lineNumbers: true,
-      mode: 'javascript',
-      theme: 'dracula',
-    });
-    this.outputMirror = CodeMirror.fromTextArea(this.outputRef.nativeElement, {
-      lineNumbers: true,
-      mode: 'javascript',
-      theme: 'dracula',
-    });
-    (this.inputMirror.display.wrapper as HTMLDivElement).classList.add('my-cm');
-    (this.outputMirror.display.wrapper as HTMLDivElement).classList.add(
-      'my-cm'
-    );
-  }
-
   transform() {
-    const bv = new BuiltValue(this.getParse(), this.rootName, this.deleteId);
-    const text = bv.build();
-    this.outputMirror.setValue(text);
-    navigator.clipboard.writeText(text);
+    const bv = new BuiltValue(this.getInputObject(), this.rootName);
+    this.outputValue = bv.build();
   }
 
   // object string or JSON
-  getParse() {
-    let value = this.inputMirror.getValue().trim();
+  getInputObject() {
+    let value = this.inputValue.trim();
     try {
       return JSON.parse(value);
     } catch (error) {

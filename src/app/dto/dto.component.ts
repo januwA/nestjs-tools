@@ -1,10 +1,5 @@
-import {
-  Component,
-  ElementRef,
-  OnInit,
-  ViewChild,
-  AfterViewInit,
-} from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import * as _ from 'lodash';
 
 import { createType } from '../utils';
 const EXT = 'Dto';
@@ -17,7 +12,7 @@ class BuiltValueAttr {
     public isList = false
   ) {}
 
-  build() {
+  build(useSwagger: boolean) {
     if (this.toType === 'String') this.value = JSON.stringify(this.value);
 
     let isClass = _.endsWith(this.toType, EXT);
@@ -25,12 +20,19 @@ class BuiltValueAttr {
       ? `example: ${JSON.stringify(this.value)},`
       : `example: ${this.value},`;
     let isArrayString = this.isList ? `isArray: true,` : ``;
-    return `
-  
+
+    let swagger = '';
+    if (useSwagger) {
+      swagger = `
   @ApiProperty({
     type: ${isArrayString ? `[${this.toType}]` : this.toType},
     ${exampleString}
-  })
+  })`;
+    }
+
+    return `
+  ${swagger}
+  @IsNotEmpty()
   readonly ${this.key}: ${isClass ? this.toType : _.lowerCase(this.toType)}${
       this.isList ? '[]' : ''
     };`;
@@ -39,11 +41,15 @@ class BuiltValueAttr {
 
 class BuiltValue {
   resultObj = {};
-  constructor(public obj: any, public rootName: string) {}
+  constructor(
+    public obj: any,
+    public rootName: string,
+    public useSwagger: boolean
+  ) {}
 
   build() {
     this.parse(this.obj, this.rootName);
-    let resultString = this.makeBody(this.resultObj);
+    let resultString = this.makeBody(this.resultObj, this.useSwagger);
     return this.addHeader(resultString).trim();
   }
 
@@ -96,10 +102,10 @@ class BuiltValue {
     }
   }
 
-  makeBody(obj: { [dtoName: string]: BuiltValueAttr[] }) {
+  makeBody(obj: { [dtoName: string]: BuiltValueAttr[] }, useSwagger: boolean) {
     return Object.entries(obj).reduce((acc, [dto, props]) => {
       const attrs = props.reduce((acc, it) => {
-        return (acc += it.build());
+        return (acc += it.build(useSwagger));
       }, '');
       return `\nexport class ${dto} {${attrs}\n}\n` + acc;
     }, '');
@@ -107,7 +113,12 @@ class BuiltValue {
 
   // 添加头文件
   addHeader(body: string): string {
-    const header = `import { ApiProperty } from '@nestjs/swagger';\n`;
+    const swaggerHeader = this.useSwagger ?  `import { ApiProperty } from '@nestjs/swagger';` : '';
+    const header = `
+${swaggerHeader}
+import { IsNotEmpty, IsString } from 'class-validator';
+
+`;
     return header + body;
   }
 }
@@ -115,65 +126,46 @@ class BuiltValue {
 @Component({
   selector: 'app-dto',
   templateUrl: './dto.component.html',
-  styleUrls: ['./dto.component.styl'],
+  styleUrls: ['./dto.component.sass'],
 })
-export class DtoComponent implements OnInit, AfterViewInit {
-  @ViewChild('input')
-  inputRef: ElementRef<HTMLTextAreaElement>;
-
-  @ViewChild('output')
-  outputRef: ElementRef<HTMLTextAreaElement>;
-
-  objectText = `{
-  id: "5d3ae5d3bb00741b443a9381",
-  isDelete: false,
-  title: "js学习笔记",
-  arr: ["a", "b"],
-  published: "2019-08-16T13:50:31.307Z",
-  types: [
-    {
-      id: "5d3ae5d3bb00741b443a9381",
-      title: "标题",
-      description: "介绍"
-    }
-  ]
-}`;
-
-  rootName = 'Cat';
-
-  inputMirror: any;
-  outputMirror: any;
-
-  constructor() {}
+export class DtoComponent implements OnInit {
   ngOnInit(): void {}
 
-  ngAfterViewInit() {
-    this.inputMirror = CodeMirror.fromTextArea(this.inputRef.nativeElement, {
-      lineNumbers: true,
-      mode: 'javascript',
-      theme: 'dracula',
-    });
-    this.outputMirror = CodeMirror.fromTextArea(this.outputRef.nativeElement, {
-      lineNumbers: true,
-      mode: 'javascript',
-      theme: 'dracula',
-    });
-    (this.inputMirror.display.wrapper as HTMLDivElement).classList.add('my-cm');
-    (this.outputMirror.display.wrapper as HTMLDivElement).classList.add(
-      'my-cm'
-    );
-  }
+  inputEditorOptions = {
+    theme: 'vs-dark',
+    language: 'json',
+    autoIndent: 'full',
+    automaticLayout: true,
+  };
+  outputEditorOptions = {
+    theme: 'vs-dark',
+    language: 'typescript',
+    readOnly: true,
+    automaticLayout: true,
+  };
+
+  inputValue = `{
+  username: "root",
+  password: "root"
+}`;
+  outputValue = '';
+  rootName = 'Cat';
+
+  useSwagger = false;
 
   transform() {
-    const bv = new BuiltValue(this.getParse(), this.rootName + EXT);
-    const text = bv.build();
-    this.outputMirror.setValue(text);
-    navigator.clipboard.writeText(text);
+    const bv = new BuiltValue(
+      this.getParse(),
+      this.rootName + EXT,
+      this.useSwagger
+    );
+    this.outputValue = bv.build();
+    navigator.clipboard.writeText(this.outputValue);
   }
 
   // object string or JSON
   getParse() {
-    let value = this.inputMirror.getValue().trim();
+    let value = this.inputValue.trim();
     try {
       return JSON.parse(value);
     } catch (error) {

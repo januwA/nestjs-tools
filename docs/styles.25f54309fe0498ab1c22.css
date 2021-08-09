@@ -1,0 +1,1 @@
+body,html{padding:0;margin:0;font-family:consolas}.warn{color:red}.tools{display:flex}#textarea-box{flex:1;display:flex}#textarea-box .input,#textarea-box .output{flex:1;height:100%}#textarea-box .output{flex:2}
